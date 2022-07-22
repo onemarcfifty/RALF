@@ -286,7 +286,7 @@ class OMFClient(discord.Client):
     # ######################################################
 
 
-    @tasks.loop(seconds=10)
+    @tasks.loop(minutes=10)
     async def task_scheduler(self):
 
         self.channel_idle_timer += 1
