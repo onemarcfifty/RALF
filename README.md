@@ -2,15 +2,12 @@
 
 R.A.L.F. (short for Responsive Artificial Lifeform ;-) ) is the "housekeeping" bot on the oneMarcFifty Discord Server
 
-It can do the following things (release version 0.2):
+It can do the following things (release version 0.3):
 
 - reply with "pong" to a "ping" (WHOA!!!)
 - Send out configurable random messages when the server is idle (like "Did you know...")
 - automatically create Events (we have Sunday video sessions at 9 AM and 6 PM)
 - remind subscribers of upcoming events
-
-Planned (release 0.3)
-
 - Help the user create a support thread with a modal view
 - let the user subscribe / unsubscribe to notification messages with a modal view
 

@@ -1,0 +1,6 @@
+Hi, I am R.A.L.F., your assistant bot. 
+
+You can interact with me by typing "/" and then a command:
+
+**/support**    helps you open a support thread as described in the <#954732247909552149> channel
+**/subscribe**  subscribe to get notified half an hour before the Sunday Funday session starts
