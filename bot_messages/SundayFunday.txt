@@ -9,3 +9,6 @@ Talk about tech stuff with the other members
 or just listen in...
 
 ****Everyone is invited!****
+
+Type **/subscribe** if you want to get notified half an hour before the conference starts.
+you can use the same command to unsubscribe at any time - no questions asked ;-)

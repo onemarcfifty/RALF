@@ -2,7 +2,7 @@ Hi, I am R.A.L.F., your assistant bot!
 
 Did you know that we have a ***support channel*** here ?
 
-Please see the <#954732247909552149> channel on how to get hep on a tech issue.
+Please see the <#954732247909552149> channel on how to get help on a tech issue.
 Alternatively, you can type /support and I will help you to create one.
 
 Please do also check in every now and then to the <#866779182293057566> channel.

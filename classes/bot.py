@@ -1,15 +1,21 @@
 import discord
-from discord import app_commands
-from dis_events import DiscordEvents
 import random
-from glob import glob
 import numpy as np
-import config
-from secret import BOT_TOKEN, CLIENT_ID, GUILD_ID
 import utils
-from discord.ext import tasks
 import datetime
+import config
+
+from glob import glob
 from dateutil import tz
+from sys import exit
+
+from discord import app_commands
+from discord.ext import tasks
+
+from classes.dis_events import DiscordEvents
+from classes.support import Support
+from classes.subscribe import Subscribe
+
 
 # #######################################
 # The OMFClient class
@@ -21,8 +27,11 @@ class OMFClient(discord.Client):
     channel_idle_timer: int
     asked_question = False
     last_question: discord.Message = None
-    guild_Events = None
     lastNotifyTimeStamp = None
+    theGuild : discord.Guild = None
+
+    guildEventsList = None
+    guildEventsClass: DiscordEvents = None
 
     # #######################################
     # init constructor
@@ -42,8 +51,39 @@ class OMFClient(discord.Client):
 
         self.tree = app_commands.CommandTree(self)
 
+        # The support command will ask for a thread title and description
+        # and create a support thread for us
+
+        @self.tree.command(name="support", description="Create a support thread")
+        async def support(interaction: discord.Interaction):
+            x : Support
+            x= Support()
+            await interaction.response.send_modal(x)
+
+        # The subscribe command will add/remove the notification roles 
+        # based on the scheduled events
+
+        @self.tree.command(name="subscribe", description="(un)subscribe to Events)")
+        async def subscribe(interaction: discord.Interaction):
+
+            # preload the menu items with the roles that the user has already
+            # we might move this to the init of the modal
+
+            x:      Subscribe
+            role:   discord.Role
+            member: discord.Member
+            
+            x=Subscribe()
+            member = interaction.user
+            
+            for option in x.Menu.options:
+                role = option.value
+                if not (member.get_role(role) is None):
+                    option.default=True
+            await interaction.response.send_modal(x)
+
         self.channel_idle_timer = 0
-        self.idle_channel =  self.get_channel(config.IDLE_MESSAGE_CHANNEL_ID)
+        self.idle_channel =  self.get_channel(config.CONFIG["IDLE_MESSAGE_CHANNEL_ID"])
 
     # #########################
     # setup_hook waits for the
@@ -62,15 +102,14 @@ class OMFClient(discord.Client):
     async def send_random_message(self):
         print("Sending random message")
         if self.idle_channel == None:
-            self.idle_channel = self.get_channel(config.IDLE_MESSAGE_CHANNEL_ID)
+            self.idle_channel = self.get_channel(config.CONFIG["IDLE_MESSAGE_CHANNEL_ID"])
+        print (f'The idle channel is {config.CONFIG["IDLE_MESSAGE_CHANNEL_ID"]} - {self.idle_channel}')
         await self.idle_channel.send(f"{random.choice(self.idle_messages)}")
 
     # ######################################################
     # on_ready is called once the client is initialized
     # it then reads in the files in the config.IDLE_MESSAGE_DIR
-    # directory and posts them randomly every
-    # config.CHANNEL_IDLE_INTERVAL seconds into the
-    # config.IDLE_MESSAGE_CHANNEL_ID channel
+    # directory and starts the schedulers
     # ######################################################
 
     async def on_ready(self):
@@ -82,12 +121,31 @@ class OMFClient(discord.Client):
 
         self.idle_messages = []
 
-        for filename in glob(config.IDLE_MESSAGE_DIR + '/*.txt'):
+        for filename in glob(config.CONFIG["IDLE_MESSAGE_DIR"] + '/*.txt'):
             print ("read {}",filename)
             with open(filename) as f:
                 self.idle_messages.append(f.read())
 
         self.idle_messages = np.array(self.idle_messages)    
+
+        # store the guild for further use
+        guild: discord.Guild
+        for guild in self.guilds:
+            if (int(guild.id) == int(config.SECRETS["GUILD_ID"])):
+                print (f"GUILD MATCHES {guild.id}")
+                self.theGuild = guild
+
+        if (self.theGuild is None):
+            print("the guild (Server ID)could not be found - please check all config data")
+            exit()
+
+        self.guildEventsClass = DiscordEvents(
+                                    discord_token=config.SECRETS["BOT_TOKEN"],
+                                    client_id=config.SECRETS["CLIENT_ID"],
+                                    bot_permissions=8,
+                                    api_version=10,
+                                    guild_id=config.SECRETS["GUILD_ID"]
+        )
 
         # start the schedulers
 
@@ -97,6 +155,7 @@ class OMFClient(discord.Client):
 
     # ######################################################
     # handle_ping is called when a user sends ping
+    # (case sensitive, exact phrase)
     # it just replies with pong
     # ######################################################
 
@@ -111,8 +170,6 @@ class OMFClient(discord.Client):
     async def create_events (self):
 
         print("Create Events")
-
-        newEvent = DiscordEvents(BOT_TOKEN,f'https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}&permissions=8&scope=bot')
 
         for theEvent in config.AUTO_EVENTS:
 
@@ -132,16 +189,16 @@ class OMFClient(discord.Client):
             # after 2 AM
             strStart=theDate.strftime(f"%Y-%m-%dT{utcStartTime}")
             strEnd=theDate.strftime(f"%Y-%m-%dT{utcEndTime}")
-            await newEvent.create_guild_event(
-                    GUILD_ID,
-                    theEvent['title'],
-                    theEvent['description'],
-                    f"{strStart}",
-                    f"{strEnd}",
-                    {},2,theEvent['channel'])
-
+            await self.guildEventsClass.create_guild_event(
+                event_name=theEvent['title'],
+                event_description=theEvent['description'],
+                event_start_time=f"{strStart}",
+                event_end_time=f"{strEnd}",
+                event_metadata={},
+                event_privacy_level=2,
+                channel_id=theEvent['channel'])
             # once we have created the event, we let everyone know 
-            channel = self.get_channel(config.IDLE_MESSAGE_CHANNEL_ID)
+            channel = self.get_channel(config.CONFIG["IDLE_MESSAGE_CHANNEL_ID"])
             await channel.send(f'Hi - I have created the scheduled Event {theEvent["title"]}')
 
 
@@ -150,12 +207,9 @@ class OMFClient(discord.Client):
     # ######################################################
 
     async def get_events_list (self): 
-        newEvent = DiscordEvents(BOT_TOKEN,f'https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}&permissions=8&scope=bot')
-        eventList = await newEvent.list_guild_events(GUILD_ID)
-        self.guild_Events = eventList
+        eventList = await self.guildEventsClass.list_guild_events()
+        self.guildEventsList = eventList
         return eventList
-
-        
 
     # ######################################################
     # on_message scans for message contents and takes 
@@ -171,15 +225,15 @@ class OMFClient(discord.Client):
         # don't respond to ourselves
         if message.author == self.user:
             return
+
         # reset the idle timer if a message has been sent or received
         self.channel_idle_timer = 0
 
         # reply to ping
         if message.content == 'ping':
            await self.handle_ping(message)
-          
-        # check if there is a question 
 
+        # check if there is a question 
         if "?" in message.content:
             self.asked_question = True
             self.last_question = message
@@ -187,13 +241,13 @@ class OMFClient(discord.Client):
             self.asked_question = False
             self.last_question = None
 
-
     # ######################################################
     # on_typing detects if a user types. 
     # We might use this one day to have users agree to policies etc.
     # before they are allowed to speak
+    # or we might launch the Support() Modal if a user starts
+    # to type in the support channel
     # ######################################################
-
 
     async def on_typing(self, channel, user, _):
         # we do not want the bot to reply to itself
@@ -212,8 +266,8 @@ class OMFClient(discord.Client):
     async def daily_tasks(self):
         print("DAILY TASKS")
 
-        # Every Monday we want to create the scheduled events
-        # for the next Sunday
+        # Every Monday (weekday 0) we want to create the 
+        # scheduled events for the next Sunday
 
         if datetime.date.today().weekday() == 0:
             print("create events")
@@ -248,7 +302,7 @@ class OMFClient(discord.Client):
                 # TODO - we need to send out a message to the @here role
                 # asking users to help if the question had not been answered
                 # Also - if the message is a reply then we should not post into the channel
-                if self.channel_idle_timer > config.QUESTION_SLEEPING_TIME:
+                if self.channel_idle_timer > config.CONFIG["QUESTION_SLEEPING_TIME"]:
                     print("QUESTION WITHOUT REPLY")
                     self.asked_question = False
         except Exception as e:
@@ -260,7 +314,7 @@ class OMFClient(discord.Client):
         # then send a random message into the idle_channel
         # #####################################
         try:
-            if self.channel_idle_timer >= config.CHANNEL_IDLE_INTERVAL:
+            if self.channel_idle_timer >= config.CONFIG["CHANNEL_IDLE_INTERVAL"]:
                 self.channel_idle_timer = 0
                 await self.send_random_message()
         except Exception as e:
@@ -290,11 +344,10 @@ class OMFClient(discord.Client):
                 print("Let me check if the event is still on")
                 try:
                     if eventList == None:
-                        newEvent = DiscordEvents(BOT_TOKEN,f'https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}&permissions=8&scope=bot')
-                        eventList = await newEvent.list_guild_events(GUILD_ID)
+                        eventList = await self.get_events_list()
                     for theScheduledEvent in eventList:
                         if theScheduledEvent["name"] == theEvent["title"]:
-                            channel = self.get_channel(config.IDLE_MESSAGE_CHANNEL_ID)
+                            channel = self.get_channel(config.CONFIG["IDLE_MESSAGE_CHANNEL_ID"])
                             theMessageText=f'Hi <@&{theEvent["subscription_role_num"]}>, the event *** {theEvent["title"]} *** will start in roughly {theEvent["notify_minutes"]} minutes in the <#{theEvent["channel"]}> channel. {theEvent["description"]}'
                             await channel.send(f"{theMessageText}")
                 except Exception as e:
