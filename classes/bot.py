@@ -13,7 +13,6 @@ from discord import app_commands
 from discord.ext import tasks
 
 from classes.dis_events import DiscordEvents
-from classes.support import Support
 from classes.subscribe import Subscribe
 
 
@@ -25,10 +24,10 @@ from classes.subscribe import Subscribe
 class OMFClient(discord.Client):
 
     channel_idle_timer: int
-    asked_question = False
-    last_question: discord.Message = None
     lastNotifyTimeStamp = None
     theGuild : discord.Guild = None
+
+    lastSentMessage:discord.Message=None
 
     guildEventsList = None
     guildEventsClass: DiscordEvents = None
@@ -50,15 +49,6 @@ class OMFClient(discord.Client):
         # to register application commands (slash commands in this case)
 
         self.tree = app_commands.CommandTree(self)
-
-        # The support command will ask for a thread title and description
-        # and create a support thread for us
-
-        @self.tree.command(name="support", description="Create a support thread")
-        async def support(interaction: discord.Interaction):
-            x : Support
-            x= Support()
-            await interaction.response.send_modal(x)
 
         # The subscribe command will add/remove the notification roles 
         # based on the scheduled events
@@ -153,14 +143,6 @@ class OMFClient(discord.Client):
         self.daily_tasks.start()
 
 
-    # ######################################################
-    # handle_ping is called when a user sends ping
-    # (case sensitive, exact phrase)
-    # it just replies with pong
-    # ######################################################
-
-    async def handle_ping (self,message : discord.Message):
-        await message.channel.send('pong', reference=message)
 
     # ######################################################
     # create_events will create the Sunday Funday events
@@ -220,7 +202,28 @@ class OMFClient(discord.Client):
     # ######################################################
 
     async def on_message(self, message  : discord.Message ):
+
+        # ignore ephemeral messages
+        if message.flags.ephemeral:
+            return
+
+
         print("{} has just sent {}".format(message.author, message.content))
+        # if the author of the previously last sent message and 
+        # the new message is ourselves, then delete the 
+        # previous message
+
+        if (int(f'{config.CONFIG["AVOID_SPAM"]}') == 1) and (self.lastSentMessage is not None):
+            if ((message.author == self.user) and 
+                (self.lastSentMessage.author == self. user) and
+                (int(f"{self.lastSentMessage.channel.id}") == (int(config.CONFIG["IDLE_MESSAGE_CHANNEL_ID"])))):
+                    try:
+                        await self.lastSentMessage.delete()
+                    except Exception as e:
+                        print(f"delete lastmessage error: {e}")
+
+
+        self.lastSentMessage = message
 
         # don't respond to ourselves
         if message.author == self.user:
@@ -229,17 +232,6 @@ class OMFClient(discord.Client):
         # reset the idle timer if a message has been sent or received
         self.channel_idle_timer = 0
 
-        # reply to ping
-        if message.content == 'ping':
-           await self.handle_ping(message)
-
-        # check if there is a question 
-        if "?" in message.content:
-            self.asked_question = True
-            self.last_question = message
-        else:
-            self.asked_question = False
-            self.last_question = None
 
     # ######################################################
     # on_typing detects if a user types. 
@@ -291,22 +283,6 @@ class OMFClient(discord.Client):
 
         self.channel_idle_timer += 1
         print("SCHEDULE")
-
-        # #####################################
-        # See if there are unanswered questions
-        # #####################################
-        try:
-            if(self.asked_question):
-                print("scheduler: Question")
-                print(self.last_question.created_at)
-                # TODO - we need to send out a message to the @here role
-                # asking users to help if the question had not been answered
-                # Also - if the message is a reply then we should not post into the channel
-                if self.channel_idle_timer > config.CONFIG["QUESTION_SLEEPING_TIME"]:
-                    print("QUESTION WITHOUT REPLY")
-                    self.asked_question = False
-        except Exception as e:
-            print(f"Scheduler question failed: {e}")
 
         # #####################################
         # see if we need to send a random message

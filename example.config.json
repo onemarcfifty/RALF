@@ -3,7 +3,8 @@
     {
         "BOT_TOKEN" : "YOURBOTTOKEN",
         "GUILD_ID"  : "YOURGUILDID",
-        "CLIENT_ID" : "YOURCLIENTID"
+        "CLIENT_ID" : "YOURCLIENTID",
+        "AVOID_SPAM" : 1
     },
     "config" :
     {
