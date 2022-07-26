@@ -27,10 +27,10 @@ Now you can cd into the bot's directory and launch it with
 ## slash commands
 
 The bot supports the following commands:
-**/setup** set up basic functionality (channel for idle messages, frequency of the messages, channel that contains the templates)
-**/subscribe** let a user subscribe to roles that are defined in the scheduled events
-**/update** update the bot (re-read the template channel)
-**/say_ralf** let ralf say something. You can specify the channel and the message ;-)
+- **/setup** set up basic functionality (channel for idle messages, frequency of the messages, channel that contains the templates)
+- **/subscribe** let a user subscribe to roles that are defined in the scheduled events
+- **/update** update the bot (re-read the template channel)
+- **/say_ralf** let ralf say something. You can specify the channel and the message ;-)
 
 ## How do you configure R.A.L.F. ?
 
