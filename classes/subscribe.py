@@ -1,6 +1,8 @@
 import discord
 import traceback
-import config
+
+from numpy import array
+from classes.config import Config
 
 # ############################################
 # the Subscribe() class is a modal ui dialog
@@ -12,23 +14,31 @@ import config
 
 class Subscribe(discord.ui.Modal, title='(un)subscribe to Event-Notification'):
     
-    # We need to make sure that the config is read at object definition time
-    # because AUTO_EVENTS might be empty otherwise
-    if config.AUTO_EVENTS == []:
-        config.readConfig()
 
-    # define the menu options (label=text, vaue=role_id)
+    def __init__(self, autoEvents : array,member:discord.Member) -> None:
+        super().__init__()
 
-    menu_options = []
-    for menu_option in config.AUTO_EVENTS:
-        menu_options.append(discord.SelectOption(label= menu_option["notify_hint"],
-                                                 value=menu_option["subscription_role_num"]))
-    # define the UI dropdown menu Element
+        # create the menu items from the Event roles:
+        menu_options = []
+        for menu_option in autoEvents:
+            menu_options.append(discord.SelectOption(
+                label= menu_option["notify_hint"],
+                value=menu_option["subscription_role_num"]))
 
-    Menu = discord.ui.Select(
-        options = menu_options,
-        max_values=len(config.AUTO_EVENTS),
-        min_values=0)
+        # define the UI dropdown menu Element
+        self.Menu = discord.ui.Select(
+            options = menu_options,
+            max_values=len(autoEvents),
+            min_values=0)
+
+        # Make sure the existing user roles are preselected
+        for option in self.Menu.options:
+            role = option.value
+            if not (member.get_role(role) is None):
+              option.default=True
+
+        # now add the child element to the form for drawing
+        self.add_item(self.Menu)
     
 
     # #####################################
@@ -44,9 +54,8 @@ class Subscribe(discord.ui.Modal, title='(un)subscribe to Event-Notification'):
         roles = interaction.user.guild.roles
         member: discord.Member
         member = interaction.user
-
+        
         # first we remove all roles
-
         for option in self.Menu.options:
             role=member.get_role(option.value)
             if not (role is None):
@@ -55,7 +64,6 @@ class Subscribe(discord.ui.Modal, title='(un)subscribe to Event-Notification'):
         # then we assign all selected roles
         # unfortunately we need to loop through all rolles
         # maybe there is a better solution ?
-
         for option in self.Menu._selected_values:
             for role in roles:
                 if int(option) == int(role.id):

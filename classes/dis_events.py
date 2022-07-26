@@ -10,24 +10,21 @@ from classes.restfulapi import DiscordAPI
 
 class DiscordEvents(DiscordAPI):
 
-    def __init__(self, 
-                discord_token: str, 
-                client_id: str,
-                bot_permissions: int,
-                api_version: int,
-                guild_id:str) -> None:
-
-        super().__init__(discord_token,client_id,bot_permissions,api_version)
-        self.guild_id = guild_id
-        print (f" DiscordEvent Client {client_id} guild {guild_id}")
+#    def __init__(self, 
+#                discord_token: str, 
+#                client_id: str,
+#                bot_permissions: int,
+#                api_version: int) -> None:
+#
+#        super().__init__(discord_token,client_id,bot_permissions,api_version)
 
 
-    async def list_guild_events(self) -> list:
+    async def list_guild_events(self,guild_id) -> list:
 
         # Returns a list of upcoming events for the supplied guild ID
         # Format of return is a list of one dictionary per event containing information.
 
-        event_retrieve_url = f'{self.base_api_url}/guilds/{self.guild_id}/scheduled-events'
+        event_retrieve_url = f'{self.base_api_url}/guilds/{guild_id}/scheduled-events'
         response_list = await self.get_api(event_retrieve_url)
         return response_list
 
@@ -39,7 +36,8 @@ class DiscordEvents(DiscordAPI):
         event_end_time: str,
         event_metadata: dict,
         event_privacy_level=2,
-        channel_id=None
+        channel_id=None,
+        guild_id=0
     ) -> None:
         
         # Creates a guild event using the supplied arguments
@@ -50,7 +48,7 @@ class DiscordEvents(DiscordAPI):
         # Event times can use UTC Offsets! - if you omit, then it will be 
         # undefined (i.e. UTC / GMT+0)
 
-        event_create_url = f'{self.base_api_url}/guilds/{self.guild_id}/scheduled-events'
+        event_create_url = f'{self.base_api_url}/guilds/{guild_id}/scheduled-events'
         event_data = json.dumps({
             'name': event_name,
             'privacy_level': event_privacy_level,

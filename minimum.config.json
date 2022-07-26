@@ -1,0 +1,9 @@
+{
+    "secret": {
+        "BOT_TOKEN": "YOURBOTTOKEN",
+        "CLIENT_ID": "YOURCLIENTID"
+    },
+    "guilds": 
+    {
+    }
+}
