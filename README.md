@@ -60,3 +60,10 @@ A special type of template message contains a definition of scheduled events. Th
 Every Monday, R.A.L.F. will then go through the Events and create them as scheduled events on the guild/server.
 
 If the user has the `subscription_role_num` role, then he/she will be notified by R.A.L.F. roughly `notify_minutes`before the event starts.
+
+### What's the story behind R.A.L.F. ?
+
+My son (who is studying computer science) came up to me and said it would be nice if we did a coding project together. I then thought this over and also wanted it to be somthing usable. On my discord server, there are a couple of things that I keep forgetting, such as generating the scheduled events or reminding people that the Sunday Funday! session had started. I told him "let's start with a simple ping bot, thatreplies with pong. But you will see, I will have it done faster than you!" - 30 minutes later he called me up and showed me the working thing - I hadn't even started ;-)
+He has contributed to this bot and the support bot (which you can find here on my Github as well) a lot, namely the /subscribe function and the question screening function
+
+**enjoy!**
