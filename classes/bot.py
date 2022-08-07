@@ -319,7 +319,7 @@ class OMFBot(AutoShardedBot):
     async def get_events_list (self,theGuild: discord.Guild):
 
         eventList = await self.EventsClass.list_guild_events(theGuild.id)
-        self.GuildData(self.guildDataList[f'{theGuild.id}']).EventsList = eventList
+        self.guildDataList[f'{theGuild.id}'].EventsList = eventList
         return eventList
 
     # ######################################################
