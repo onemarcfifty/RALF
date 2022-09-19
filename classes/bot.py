@@ -1,3 +1,4 @@
+from pickle import TRUE
 import discord
 import random
 import utils
@@ -11,6 +12,7 @@ from discord.ext.commands import Bot,AutoShardedBot
 
 from classes.dis_events import DiscordEvents
 from classes.subscribe import Subscribe
+from classes.subscribemenu import SubscribeView
 from classes.config import Config
 from dataclasses import dataclass
 
@@ -66,14 +68,18 @@ class OMFBot(AutoShardedBot):
         @self.tree.command(name="subscribe", description="(un)subscribe to Events)")
         async def subscribe(interaction: discord.Interaction):
 
-            x:      Subscribe
+            #x:      Subscribe
+            x:      SubscribeView
             member: discord.Member
            
             guildNode=self.configData.readGuild(interaction.guild.id)
             member = interaction.user
-            x=Subscribe(autoEvents=guildNode["AUTO_EVENTS"],member=member)
-            await interaction.response.send_modal(x)
-        
+            #x=Subscribe(autoEvents=guildNode["AUTO_EVENTS"],member=member)
+            #await interaction.response.send_modal(x)
+            x=SubscribeView(autoEvents=guildNode["AUTO_EVENTS"],member=member)
+            print(x)
+            await interaction.response.send_message("Chose",view=x ,ephemeral=True)
+
         # The setup command will ask for the guild parameters and
         # read them in
         @self.tree.command(name="setup", description="Define parameters for the bot")
