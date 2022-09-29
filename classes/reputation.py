@@ -97,7 +97,7 @@ class Reputation:
         userJoin=discordUser.joined_at.replace(tzinfo=None)
         userAge = now - userJoin
 
-        theReputation=userAge.days
+        theReputation=max(userAge.days,self.initialReputation)
         theReputationText="Your Reputation:\n\nInitial (age): " + str(theReputation) + "\n"
 
         # calculate user's score based on reputation roles he/she is in
