@@ -14,6 +14,7 @@ from classes.dis_events import DiscordEvents
 from classes.subscribe import Subscribe
 from classes.subscribemenu import SubscribeView
 from classes.config import Config
+from classes.reputation import Reputation
 from dataclasses import dataclass
 
 
@@ -24,6 +25,7 @@ from dataclasses import dataclass
 
 
 class OMFBot(AutoShardedBot):
+
 
     # each guild has the following elements:
     # - a list of scheduled Events (EventsList)
@@ -36,6 +38,7 @@ class OMFBot(AutoShardedBot):
         EventsList = {}
         idle_messages=[]
         channel_idle_timer=0
+        ReputationFilter:Reputation = None
 
     # the guildDataList contains one GuildData class per item.
     # the key is the guild ID
@@ -62,6 +65,7 @@ class OMFBot(AutoShardedBot):
         super().__init__(command_prefix="!",intents=intents)
         self.prefix="!"
         self.configData=Config('config.json')
+
 
         # The subscribe command will add/remove the notification roles 
         # based on the scheduled events
@@ -123,8 +127,9 @@ class OMFBot(AutoShardedBot):
                     guildNode=self.configData.readGuild(interaction.guild.id)
                     eventNodes=guildNode["AUTO_EVENTS"]
                     numEvents=len(eventNodes)
+                    numRoles=len(self.guildDataList[f'{interaction.guild.id}'].ReputationFilter.reputationRoles)
 
-                    await interaction.response.send_message(f'{numEvents} Events and {numMessages} Message templates\nThank you for using my services!', ephemeral=True)
+                    await interaction.response.send_message(f'{numRoles} reputation roles, {numEvents} Events and {numMessages} Message templates\nThank you for using my services!', ephemeral=True)
                 except Exception as e:
                     print(f"ERROR in update command: {e}")
                     await interaction.response.send_message(f'Ooops, there was a glitch!', ephemeral=True)
@@ -145,6 +150,16 @@ class OMFBot(AutoShardedBot):
                     print(f"ERROR in say_ralf: {e}")
                     await interaction.response.send_message(f'Ooops, there was a glitch!', ephemeral=True)
 
+        @self.tree.command(name="reputation", description="shows your reputation")
+        async def update(interaction: discord.Interaction):
+            
+                try:
+
+                    userReputation=self.guildDataList[f'{interaction.guild.id}'].ReputationFilter.getReputation(interaction.user,True)
+                    await interaction.response.send_message(userReputation, ephemeral=True)
+                except Exception as e:
+                    print(f"ERROR in update command: {e}")
+                    await interaction.response.send_message(f'Ooops, there was a glitch!', ephemeral=True)
 
     # ################################
     # the bot run command just starts 
@@ -215,27 +230,58 @@ class OMFBot(AutoShardedBot):
     async def readMessageTemplates(self,theGuild:discord.Guild):
 
         # we init the guild data with a new GuildData object
-        self.guildDataList[f'{theGuild.id}'] = self.GuildData()
+        self.guildDataList[f'{theGuild.id}'] = self.GuildData(None)
 
         guildNode=self.configData.readGuild(theGuild.id)
         if guildNode is None:
             print (f"Guild {theGuild.id} has no setup")
             return
+        
+        # if we have data for that guild then we try to read in the template messages from
+        # the predefined template channel
+
         theTemplateChannel:discord.TextChannel
         theTemplateChannel=theGuild.get_channel(int(guildNode["CONFIG_CHANNEL_ID"]))
         message:discord.Message
         messages = theTemplateChannel.history(limit=50)
         self.guildDataList[f'{theGuild.id}'].idle_messages=[]
         eventNodes=[]
+
+        # configuration for events and reputation are json objects
+        # everything else is considered to be an idle message that
+        # is randomly being sent into the configured channel
+
         async for message in messages: 
             messageContent:str
             messageContent=message.content
             try:
+
+                # if the message is a dictionary then it is either an event
+                # or a list of reputation roles
+
                 someDict=ast.literal_eval(messageContent)
                 if isinstance(someDict, dict):
-                    eventNodes.append(someDict)
+                    try:
+                        if (someDict["REPUTATION"] is not None):
+                            allKeys=someDict["REPUTATION"]
+
+                            # the "MUTE" key contains the role that is assigned to a user
+                            # who sent too many messages and ignored the warnings
+
+                            self.guildDataList[f'{theGuild.id}'].ReputationFilter = Reputation(theGuild,40,allKeys["MUTE"])
+                            for rep in allKeys:
+                                if (rep != "MUTE" ):
+
+                                    # other roles increaese the reputation
+                                    print("Role ", str(rep)," adds Reputation ",allKeys[rep])
+                                    self.guildDataList[f'{theGuild.id}'].ReputationFilter.addReputationRole(int(rep),int(allKeys[rep]))
+                    except Exception as ee:
+                        eventNodes.append(someDict)
             except Exception as e:
                 self.guildDataList[f'{theGuild.id}'].idle_messages.append(message.content)
+
+        # the "AUTO_EVENTS" node contains all the planned events
+                
         guildNode["AUTO_EVENTS"]=eventNodes
         self.configData.writeGuild(theGuild.id,guildNode)
 
@@ -348,9 +394,17 @@ class OMFBot(AutoShardedBot):
         if message.author == self.user:
             return
 
+        reputationFilter=self.guildDataList[f'{message.guild.id}'].ReputationFilter
+        if not (reputationFilter is None):
+            theScore=await reputationFilter.checkMessage(message)
+            # user is throtteled or muted
+            if (theScore<=0):
+                await message.reply("Hold your horses - **you are sending too many messages**\nHave you sent a lot of links?\nIf you continue to send then **you will be muted**\n**contact an admin** in order to have you added to a trusted role\n")
+            if (theScore<=-1):
+                await message.reply("**You have sent too many messages**\nHave you sent a lot of links?\n**you are now muted**\nAdmins have been alerted and will examine the situation\nIf this was a false alert then you will be unblocked soon")
+
         # reset the idle timer if a message has been sent or received
         self.guildDataList[f'{message.guild.id}'].channel_idle_timer=0
-
         await self.process_commands(message)
 
 
