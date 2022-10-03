@@ -188,6 +188,12 @@ class OMFBot(AutoShardedBot):
         except Exception as e:
             print(f"ERROR in setup_hook: {e}")
 
+        # transmit the VirusTotal Token to the scanner object
+        scanner = self.get_cog('Scanner')
+        if scanner is not None:
+            scanner.registervTotal(self.configData.getVToken())
+            print(f'TOKEN: {self.configData.getVToken()}')
+
 
     # ######################################################
     # send_random_message is called when the server is idle
@@ -383,6 +389,12 @@ class OMFBot(AutoShardedBot):
     # ######################################################
 
     async def on_message(self, message  : discord.Message ):
+
+        try:
+            x=message.author
+        except Exception as e:
+            # message has been deleted by the scanner
+            return
 
         # ignore ephemeral messages
         if message.flags.ephemeral:

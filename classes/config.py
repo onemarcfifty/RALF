@@ -43,6 +43,10 @@ class Config():
         secretNode=self.getNode("secret")
         return secretNode.get('BOT_TOKEN')
 
+    def getVToken(self):
+        secretNode=self.getNode("secret")
+        return secretNode.get('VTOTAL_TOKEN')
+
     def getClientID(self):
         secretNode=self.getNode("secret")
         return secretNode.get('CLIENT_ID')
