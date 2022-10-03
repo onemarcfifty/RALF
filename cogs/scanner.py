@@ -11,8 +11,13 @@ import hashlib
 from discord.ext import commands
 import discord
 import re
+from numpy import size
 import vt
 import asyncio
+from sys import getsizeof
+from io import BytesIO
+from time import sleep
+
 
 # #####################################
 #
@@ -20,15 +25,18 @@ import asyncio
 #
 # #####################################
 
-
-stFile=1
-stURL=2
-stDomain=3
+# return type values
 
 rvHarmless="harmless"
 rvSuspicious="suspicious"
 rvMalicious="malicious"
 rvUnknown="unknown"
+
+# threshold for file scan or sha256
+# small files: upload
+# large files: check sha256
+
+vtUploadThreshold=1000000
 
 
 # #####################################
@@ -65,18 +73,29 @@ class Scanner(commands.Cog):
     # for scan
     # ##############################################################
     
-    async def getVerdict(self,vtObjectSring):
-        vtInfo:vt.Object
+    async def getVerdict(self,vtObjectString,objectData):
+        print("getVerdict START")
+        vtInfo:vt.Object=None
         theVerdict=rvHarmless 
+        if (objectData is not None):
+            try:
+                analysis=await self.vtClient.scan_file_async(objectData,wait_for_completion=True)
+                vtInfo=await self.vtClient.get_object_async("/analyses/{}", analysis.id)
+            except Exception as e:
+                theVerdict=rvUnknown
+                print(f"scanner(1) vtInfo returned {e}")
+        #else:
         try:
-            vtInfo=await self.vtClient.get_object_async(vtObjectSring)
+            vtInfo=await self.vtClient.get_object_async(vtObjectString)
         except Exception as e:
             theVerdict=rvUnknown
-            print(f"scanner vtInfo returned {e}")
-
+            print(f"scanner(2) vtInfo returned {e}")
+        print(f'vtInfo: {vtInfo}')
+        if (vtInfo is None):
+            theVerdict=rvUnknown
         if (not theVerdict == rvUnknown):    
             vtInfoAnalysis=vtInfo.get("last_analysis_stats")
-            print(f"scanner vtInfo returned {vtInfoAnalysis}")
+            print(f"scanner(3) vtInfo returned {vtInfoAnalysis}")
             m=vtInfoAnalysis["malicious"]
             h=vtInfoAnalysis["harmless"]
             s=vtInfoAnalysis["suspicious"]
@@ -84,6 +103,7 @@ class Scanner(commands.Cog):
                 theVerdict = rvSuspicious
             if (m>h):
                 theVerdict = rvMalicious
+        print("getVerdict END")
         return theVerdict
 
     # ##############################################################
@@ -120,7 +140,7 @@ class Scanner(commands.Cog):
                 xmsg=await msg.reply(newMessage)
                 print("{} is a URL".format(c))
                 url_id = vt.url_id(c)
-                theVerdict = await self.getVerdict(f"/urls/{url_id}")
+                theVerdict = await self.getVerdict(f"/urls/{url_id}",None)
                 newMessage=f'{newMessage}\n>> Scan result: **{theVerdict}**\n'
                 await xmsg.edit(content=newMessage)
                 if (theVerdict==rvMalicious):
@@ -143,9 +163,18 @@ class Scanner(commands.Cog):
                 sha256String = hashlib.sha256(attachmentContent).hexdigest();
                 newMessage=f'{newMessage}\n>> submitting hash to Scan Engine'
                 await xmsg.edit(content=newMessage)
-                theVerdict=await self.getVerdict(f'/files/{sha256String}')
-                newMessage=f'{newMessage}\n>> Scan result: **{theVerdict}**\n'
+                theVerdict=await self.getVerdict(f'/files/{sha256String}',None)
+                newMessage=f'{newMessage}\n>> Scan result: **{theVerdict}**'
                 await xmsg.edit(content=newMessage)
+                if (getsizeof(attachmentContent) < vtUploadThreshold) and (theVerdict==rvUnknown):
+                    newMessage=f'{newMessage}\n>> submitting file to scan engine\n'
+                    await xmsg.edit(content=newMessage)
+                    fp = BytesIO()
+                    await theAttachment.save(fp)
+                    theVerdict=await self.getVerdict(f'/files/{sha256String}',fp)
+                    fp.close()
+                    newMessage=f'{newMessage}\n>> Scan result: **{theVerdict}**\n'
+                    await xmsg.edit(content=newMessage)
                 if (theVerdict==rvMalicious):
                     await xmsg.edit(content=f'**FILE HAS BEEN REMOVED FOR SECURITY REASONS**\n')
                     await msg.delete()
