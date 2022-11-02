@@ -6,17 +6,15 @@
 # 
 # #####################################
 
-from asyncore import loop
 import hashlib
 from discord.ext import commands
 import discord
 import re
-from numpy import size
 import vt
 import asyncio
 from sys import getsizeof
 from io import BytesIO
-from time import sleep
+import os.path
 
 
 # #####################################
@@ -36,7 +34,11 @@ rvUnknown="unknown"
 # small files: upload
 # large files: check sha256
 
-vtUploadThreshold=1000000
+vtUploadThreshold=10000000
+
+# File exception list for scan
+
+fileScanExceptionList=['jpg','jpeg','png','bmp','txt','gif']
 
 
 # #####################################
@@ -67,6 +69,19 @@ class Scanner(commands.Cog):
     def registervTotal(self,vToken):
         self.vTotalAPIKEY = vToken
 
+    # ############################################
+    # needsScanning checks if a file needs to be 
+    # scanned at all
+    # ############################################
+    
+    def needsScanning(self,fileName):
+        theFileSuffix=(os.path.splitext(fileName)[1][1:]).lower()
+        if (theFileSuffix in fileScanExceptionList):
+            print(f"File {fileName} with extension {theFileSuffix} clear")
+            return False
+        else:
+            print(f"File {fileName} with extension {theFileSuffix} needs scanning")
+            return True
 
     # ##############################################################
     # getVerdict submits domains, URLS and/or files to Virustotal
@@ -154,32 +169,73 @@ class Scanner(commands.Cog):
 
         # check embedded files
         if len(msg.attachments) > 0:
-            newMessage="**SECURITY WARNING**\nFiles posted here are systematically scanned\nEven if the scan is negative the file may still be malicious\n"
-            xmsg=await msg.reply(newMessage)
+            # first let's check if the files need scanning at all 
+            needToScan=False
             for theAttachment in msg.attachments:
-                newMessage=f'{newMessage}\n>> hashing file {theAttachment.filename}'
-                await xmsg.edit(content=newMessage)
-                attachmentContent = await theAttachment.read()
-                sha256String = hashlib.sha256(attachmentContent).hexdigest();
-                newMessage=f'{newMessage}\n>> submitting hash to Scan Engine'
-                await xmsg.edit(content=newMessage)
-                theVerdict=await self.getVerdict(f'/files/{sha256String}',None)
-                newMessage=f'{newMessage}\n>> Scan result: **{theVerdict}**'
-                await xmsg.edit(content=newMessage)
-                if (getsizeof(attachmentContent) < vtUploadThreshold) and (theVerdict==rvUnknown):
-                    newMessage=f'{newMessage}\n>> submitting file to scan engine\n'
-                    await xmsg.edit(content=newMessage)
-                    fp = BytesIO()
-                    await theAttachment.save(fp)
-                    theVerdict=await self.getVerdict(f'/files/{sha256String}',fp)
-                    fp.close()
-                    newMessage=f'{newMessage}\n>> Scan result: **{theVerdict}**\n'
-                    await xmsg.edit(content=newMessage)
-                if (theVerdict==rvMalicious):
-                    await xmsg.edit(content=f'**FILE HAS BEEN REMOVED FOR SECURITY REASONS**\n')
-                    await msg.delete()
-                    # take further action
+                if self.needsScanning(theAttachment.filename) == True:
+                    needToScan=True
+            
+            # if all attachments are harmless then we will delete the warning message
+            # once the scan is finished
+            allHarmless=True
 
+            # if we need to scan then go through all the attachments and submit them to the scan engine
+            if (needToScan == True):
+
+                # we post a new message indicating that files will be scanned         
+                newMessage="**SECURITY WARNING**\nFiles posted here are systematically scanned\nEven if the scan is negative the file may still be malicious\n"
+                xmsg=await msg.reply(newMessage)
+
+                # now we loop through all the attachments
+                for theAttachment in msg.attachments:
+                    if self.needsScanning(theAttachment.filename) == True:
+                        newMessage=f'{newMessage}\n>> hashing file {theAttachment.filename}'
+                        await xmsg.edit(content=newMessage)
+
+                        # let's read the attachment content and hash it
+                        attachmentContent = await theAttachment.read()
+                        sha256String = hashlib.sha256(attachmentContent).hexdigest();
+                        newMessage=f'{newMessage}\n>> submitting hash to Scan Engine'
+                        await xmsg.edit(content=newMessage)
+
+                        # and wait for a verdict from the scan engine
+                        theVerdict=await self.getVerdict(f'/files/{sha256String}',None)
+                        newMessage=f'{newMessage}\n>> Scan result: **{theVerdict}**'
+                        await xmsg.edit(content=newMessage)
+
+                        # if the file hash is unknown and the file is not too large 
+                        # then we upload the file to the scan engine
+                        if (theVerdict==rvUnknown):
+
+                            # if the file is too large then we don't scan but we leave the 
+                            # warning message
+                            if (getsizeof(attachmentContent) >= vtUploadThreshold):
+                                allHarmless=False
+                                newMessage=f'{newMessage}\n>> file too large to be scanned\n'
+                                await xmsg.edit(content=newMessage)
+                            else:
+                                newMessage=f'{newMessage}\n>> submitting file to scan engine\n'
+                                await xmsg.edit(content=newMessage)
+                                fp = BytesIO()
+                                await theAttachment.save(fp)
+                                theVerdict=await self.getVerdict(f'/files/{sha256String}',fp)
+                                fp.close()
+                                newMessage=f'{newMessage}\n>> Scan result: **{theVerdict}**\n'
+                                await xmsg.edit(content=newMessage)
+                      
+                        # if the content of the file had been judged malicious then we remove the
+                        # whole initial message
+                        if (theVerdict==rvMalicious):
+                            await xmsg.edit(content=f'**FILE HAS BEEN REMOVED FOR SECURITY REASONS**\n')
+                            await msg.delete()
+                            allHarmless=False
+                            # take further action
+
+                # all attachments have proven to be harmless -
+                # remove the warning message
+                if (allHarmless == True):
+                    await xmsg.edit(content=f'attachments have been scanned - no issue found\n')
+                    #await xmsg.delete()    
 
     # #####################################
     # hook into edited messages
