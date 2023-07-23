@@ -37,7 +37,7 @@ class MessageData:
 class Reputation:
 
     # the initialReputation you have
-    initialReputation=10
+    initialReputation=25
 
     # the penalty in reputation for posting a link
     linkPenalty=-5
